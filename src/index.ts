@@ -33,9 +33,9 @@ async function handlerReset(req: Request, res: Response) {
 	config.fileserverHits = 0;
 	res.send();	
 }
-app.get("/reset", handlerReset);
-app.get("/metrics", handlerMetrics);
-app.get("/healthz", handlerReadiness);
+app.get("/api/reset", handlerReset);
+app.get("/api/metrics", handlerMetrics);
+app.get("/api/healthz", handlerReadiness);
 app.use("/app", express.static("./app"));
 app.use("/app", express.static("./app/assets"));
 
