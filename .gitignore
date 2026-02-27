@@ -1,3 +1,4 @@
 .nvmrc
 node_modules
 dist
+server.log
