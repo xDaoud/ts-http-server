@@ -26,15 +26,21 @@ async function handlerReadiness(req: Request, res: Response) {
 	res.send("OK");
 }
 async function handlerMetrics(req: Request, res: Response){
-	res.set('Content-Type', 'text/plain; charset=utf-8');
-	res.send(`Hits: ${config.fileserverHits}`);
+	res.set('Content-Type', 'text/html; charset=utf-8');
+	res.send(`<html>
+  <body>
+    <h1>Welcome, Chirpy Admin</h1>
+    <p>Chirpy has been visited ${config.fileserverHits} times!</p>
+  </body>
+</html>`);
 }
 async function handlerReset(req: Request, res: Response) {
 	config.fileserverHits = 0;
 	res.send();	
 }
-app.get("/api/reset", handlerReset);
-app.get("/api/metrics", handlerMetrics);
+
+app.post("/admin/reset", handlerReset);
+app.get("/admin/metrics", handlerMetrics);
 app.get("/api/healthz", handlerReadiness);
 app.use("/app", express.static("./app"));
 app.use("/app", express.static("./app/assets"));
