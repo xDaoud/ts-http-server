@@ -1,7 +1,6 @@
 import express, { NextFunction } from "express";
 import { Request, Response } from "express";
 import { config } from "./config.js";
-import { listenerCount } from "node:process";
 
 const app = express();
 const PORT = 8080;
@@ -49,9 +48,10 @@ async function handlerValidate(req: Request, res: Response) {
 		if (parsedBody.body.length > 140) {
 			throw new Error("Chirp is too long")
 		}
+		const cleanedBody = cleanBody(parsedBody.body);
 		res.header("Content-Type", "application/json");
-		res.status(200).send(JSON.stringify({ valid: true }));
-		
+		res.status(200).send(JSON.stringify({ cleanedBody: cleanedBody }));
+
 	} catch (error) {
 		let message = "Something went wrong";
 
@@ -74,3 +74,15 @@ app.use("/app", express.static("./app/assets"));
 app.listen(PORT, () => {
 	console.log(`Server is running at http://localhost:${PORT}`);
 });
+
+function cleanBody(bodyStr: string){
+	const bannedWords = ["kerfuffle", "sharbert", "fornax"];
+	const words = bodyStr
+	.split(" ");
+	for(const i in words){
+		if(bannedWords.includes(words[i].toLowerCase())){
+			words[i] = "****";
+		}
+	}
+	return words.join(" ");
+}
