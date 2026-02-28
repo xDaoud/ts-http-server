@@ -27,7 +27,7 @@ function errorHandler(err: Error, req: Request, res: Response, next: NextFunctio
 }
 
 function middlewareMetricsInc(req: Request, res: Response, next: NextFunction) {
-	config.fileserverHits++;
+	config.api.fileserverHits++;
 	next();
 }
 
@@ -52,12 +52,12 @@ function handlerMetrics(req: Request, res: Response) {
 	res.send(`<html>
   <body>
     <h1>Welcome, Chirpy Admin</h1>
-    <p>Chirpy has been visited ${config.fileserverHits} times!</p>
+    <p>Chirpy has been visited ${config.api.fileserverHits} times!</p>
   </body>
 </html>`);
 }
 function handlerReset(req: Request, res: Response) {
-	config.fileserverHits = 0;
+	config.api.fileserverHits = 0;
 	res.send();
 }
 function handlerValidate(req: Request, res: Response) {
