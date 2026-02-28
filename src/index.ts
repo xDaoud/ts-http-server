@@ -1,14 +1,28 @@
 import express, { NextFunction } from "express";
 import { Request, Response } from "express";
 import { config } from "./config.js";
+import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
+
 
 const app = express();
 const PORT = 8080;
 
 function errorHandler(err: Error, req: Request, res: Response, next: NextFunction){
-	console.log(`error: ${err.message}`);
-	res.status(500).json({
-    error: "Something went wrong on our end",
+	console.log(`${err.name}: ${err.message}`);
+	let status = 500;
+	if(err instanceof BadRequestError){
+		status = 400;
+	} else if(err instanceof UnauthorizedError){
+		status = 401;
+	} else if(err instanceof ForbiddenError){
+		status = 403;
+	} else if(err instanceof NotFoundError){
+		status = 404;
+	} else {
+		status = 500;
+	}
+	res.status(status).json({
+    error: err.message,
   });
 }
 
@@ -49,10 +63,10 @@ function handlerReset(req: Request, res: Response) {
 function handlerValidate(req: Request, res: Response) {
 		const parsedBody = req.body;
 		if (!parsedBody.body) {
-			throw new Error("Something went wrong");
+			throw new BadRequestError("Something went wrong");
 		}
 		if (parsedBody.body.length > 140) {
-			throw new Error("Chirp is too long")
+			throw new BadRequestError("Chirp is too long. Max length is 140")
 		}
 		const cleanedBody = cleanBody(parsedBody.body);
 		res.header("Content-Type", "application/json");
