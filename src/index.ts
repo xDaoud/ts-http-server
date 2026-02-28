@@ -5,6 +5,13 @@ import { config } from "./config.js";
 const app = express();
 const PORT = 8080;
 
+function errorHandler(err: Error, req: Request, res: Response, next: NextFunction){
+	console.log(`error: ${err.message}`);
+	res.status(500).json({
+    error: "Something went wrong on our end",
+  });
+}
+
 function middlewareMetricsInc(req: Request, res: Response, next: NextFunction) {
 	config.fileserverHits++;
 	next();
@@ -26,7 +33,7 @@ async function handlerReadiness(req: Request, res: Response) {
 	res.set('Content-Type', 'text/plain; charset=utf-8');
 	res.send("OK");
 }
-async function handlerMetrics(req: Request, res: Response) {
+function handlerMetrics(req: Request, res: Response) {
 	res.set('Content-Type', 'text/html; charset=utf-8');
 	res.send(`<html>
   <body>
@@ -35,12 +42,11 @@ async function handlerMetrics(req: Request, res: Response) {
   </body>
 </html>`);
 }
-async function handlerReset(req: Request, res: Response) {
+function handlerReset(req: Request, res: Response) {
 	config.fileserverHits = 0;
 	res.send();
 }
-async function handlerValidate(req: Request, res: Response) {
-	try {
+function handlerValidate(req: Request, res: Response) {
 		const parsedBody = req.body;
 		if (!parsedBody.body) {
 			throw new Error("Something went wrong");
@@ -51,16 +57,6 @@ async function handlerValidate(req: Request, res: Response) {
 		const cleanedBody = cleanBody(parsedBody.body);
 		res.header("Content-Type", "application/json");
 		res.status(200).send(JSON.stringify({ cleanedBody: cleanedBody }));
-
-	} catch (error) {
-		let message = "Something went wrong";
-
-		if (error instanceof Error) {
-			message = error.message;
-		}
-		res.header("Content-Type", "application/json");
-		res.status(400).send(JSON.stringify({ error: message }));
-	}
 }
 
 
@@ -71,6 +67,7 @@ app.get("/api/healthz", handlerReadiness);
 app.use("/app", express.static("./app"));
 app.use("/app", express.static("./app/assets"));
 
+app.use(errorHandler);
 app.listen(PORT, () => {
 	console.log(`Server is running at http://localhost:${PORT}`);
 });
