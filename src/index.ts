@@ -1,29 +1,30 @@
-import express, { NextFunction } from "express";
+import express, { application, NextFunction } from "express";
 import { Request, Response } from "express";
 import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
+import { createUserByEmail, deleteUsers } from "./db/queries/users.js";
 
 
 const app = express();
 const PORT = 8080;
 
-function errorHandler(err: Error, req: Request, res: Response, next: NextFunction){
+function errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
 	console.log(`${err.name}: ${err.message}`);
 	let status = 500;
-	if(err instanceof BadRequestError){
+	if (err instanceof BadRequestError) {
 		status = 400;
-	} else if(err instanceof UnauthorizedError){
+	} else if (err instanceof UnauthorizedError) {
 		status = 401;
-	} else if(err instanceof ForbiddenError){
+	} else if (err instanceof ForbiddenError) {
 		status = 403;
-	} else if(err instanceof NotFoundError){
+	} else if (err instanceof NotFoundError) {
 		status = 404;
 	} else {
 		status = 500;
 	}
 	res.status(status).json({
-    error: err.message,
-  });
+		error: err.message,
+	});
 }
 
 function middlewareMetricsInc(req: Request, res: Response, next: NextFunction) {
@@ -56,24 +57,45 @@ function handlerMetrics(req: Request, res: Response) {
   </body>
 </html>`);
 }
-function handlerReset(req: Request, res: Response) {
-	config.api.fileserverHits = 0;
-	res.send();
+async function handlerReset(req: Request, res: Response, next: NextFunction) {
+	try {
+		if (config.api.platform !== "dev") {
+			throw new ForbiddenError("You're not authorized!");
+		}
+		await deleteUsers();
+		res.status(200).send();
+	} catch (err) {
+		next(err);
+	}
 }
 function handlerValidate(req: Request, res: Response) {
+	const parsedBody = req.body;
+	if (!parsedBody.body) {
+		throw new BadRequestError("Something went wrong");
+	}
+	if (parsedBody.body.length > 140) {
+		throw new BadRequestError("Chirp is too long. Max length is 140")
+	}
+	const cleanedBody = cleanBody(parsedBody.body);
+	res.header("Content-Type", "application/json");
+	res.status(200).send(JSON.stringify({ cleanedBody: cleanedBody }));
+}
+async function handlerUsers(req: Request, res: Response, next: NextFunction) {
+	try {
 		const parsedBody = req.body;
-		if (!parsedBody.body) {
+		if (!parsedBody.email) {
 			throw new BadRequestError("Something went wrong");
 		}
-		if (parsedBody.body.length > 140) {
-			throw new BadRequestError("Chirp is too long. Max length is 140")
-		}
-		const cleanedBody = cleanBody(parsedBody.body);
+		const user = await createUserByEmail(parsedBody.email);
 		res.header("Content-Type", "application/json");
-		res.status(200).send(JSON.stringify({ cleanedBody: cleanedBody }));
+		res.status(201).send(JSON.stringify(user));
+	}
+	catch (err) {
+		next(err);
+	}
 }
 
-
+app.post("/api/users", handlerUsers)
 app.post("/api/validate_chirp", handlerValidate);
 app.post("/admin/reset", handlerReset);
 app.get("/admin/metrics", handlerMetrics);
@@ -86,12 +108,12 @@ app.listen(PORT, () => {
 	console.log(`Server is running at http://localhost:${PORT}`);
 });
 
-function cleanBody(bodyStr: string){
+function cleanBody(bodyStr: string) {
 	const bannedWords = ["kerfuffle", "sharbert", "fornax"];
 	const words = bodyStr
-	.split(" ");
-	for(const i in words){
-		if(bannedWords.includes(words[i].toLowerCase())){
+		.split(" ");
+	for (const i in words) {
+		if (bannedWords.includes(words[i].toLowerCase())) {
 			words[i] = "****";
 		}
 	}
