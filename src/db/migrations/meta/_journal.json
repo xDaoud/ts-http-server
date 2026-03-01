@@ -8,6 +8,13 @@
       "when": 1772290859635,
       "tag": "0000_steep_thunderbolts",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772370376798,
+      "tag": "0001_boring_jackal",
+      "breakpoints": true
     }
   ]
 }

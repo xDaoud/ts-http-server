@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
 import { createUserByEmail, deleteUsers } from "./db/queries/users.js";
+import { createChirp } from "./db/queries/chirps.js";
 
 
 const app = express();
@@ -68,17 +69,22 @@ async function handlerReset(req: Request, res: Response, next: NextFunction) {
 		next(err);
 	}
 }
-function handlerValidate(req: Request, res: Response) {
-	const parsedBody = req.body;
-	if (!parsedBody.body) {
-		throw new BadRequestError("Something went wrong");
+async function handlerChirps(req: Request, res: Response, next: NextFunction) {
+	try {
+		const parsedBody = req.body;
+		if (!parsedBody.body || !parsedBody.userId) {
+			throw new BadRequestError("Something went wrong");
+		}
+		if (parsedBody.body.length > 140) {
+			throw new BadRequestError("Chirp is too long. Max length is 140")
+		}
+		const cleanedBody = cleanBody(parsedBody.body);
+		const chirp = await createChirp(cleanedBody, parsedBody.userId);
+		res.header("Content-Type", "application/json");
+		res.status(201).send(JSON.stringify(chirp));
+	} catch (err) {
+		next(err);
 	}
-	if (parsedBody.body.length > 140) {
-		throw new BadRequestError("Chirp is too long. Max length is 140")
-	}
-	const cleanedBody = cleanBody(parsedBody.body);
-	res.header("Content-Type", "application/json");
-	res.status(200).send(JSON.stringify({ cleanedBody: cleanedBody }));
 }
 async function handlerUsers(req: Request, res: Response, next: NextFunction) {
 	try {
@@ -96,7 +102,7 @@ async function handlerUsers(req: Request, res: Response, next: NextFunction) {
 }
 
 app.post("/api/users", handlerUsers)
-app.post("/api/validate_chirp", handlerValidate);
+app.post("/api/chirps", handlerChirps);
 app.post("/admin/reset", handlerReset);
 app.get("/admin/metrics", handlerMetrics);
 app.get("/api/healthz", handlerReadiness);
@@ -108,7 +114,7 @@ app.listen(PORT, () => {
 	console.log(`Server is running at http://localhost:${PORT}`);
 });
 
-function cleanBody(bodyStr: string) {
+function cleanBody(bodyStr: string): string {
 	const bannedWords = ["kerfuffle", "sharbert", "fornax"];
 	const words = bodyStr
 		.split(" ");
