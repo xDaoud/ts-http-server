@@ -2,8 +2,10 @@ import express, { application, NextFunction } from "express";
 import { Request, Response } from "express";
 import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
-import { createUserByEmail, deleteUsers } from "./db/queries/users.js";
+import { createUserByEmail, deleteUsers, getUserByEmail } from "./db/queries/users.js";
 import { createChirp, getAllChirps, getChirpById } from "./db/queries/chirps.js";
+import { checkPasswordHash, hashPassword } from "./auth.js";
+import { UserResponse } from "./db/schema.js";
 
 
 const app = express();
@@ -89,12 +91,50 @@ async function handlerChirps(req: Request, res: Response, next: NextFunction) {
 async function handlerUsers(req: Request, res: Response, next: NextFunction) {
 	try {
 		const parsedBody = req.body;
-		if (!parsedBody.email) {
+		if (!parsedBody.email || !parsedBody.password) {
 			throw new BadRequestError("Something went wrong");
 		}
-		const user = await createUserByEmail(parsedBody.email);
+		const hashedPassword = await hashPassword(parsedBody.password);
+		console.log(parsedBody.password);
+		console.log(hashedPassword);
+		console.log(hashedPassword.length);
+		const user = await createUserByEmail(parsedBody.email, hashedPassword);
+		const userResponse : UserResponse = {
+			id: user.id,
+			createdAt: user.createdAt,
+			updatedAt: user.updatedAt,
+			email: user.email,
+		};
 		res.header("Content-Type", "application/json");
-		res.status(201).send(JSON.stringify(user));
+		res.status(201).send(JSON.stringify(userResponse));
+	}
+	catch (err) {
+		next(err);
+	}
+}
+
+async function handlerLogin(req: Request, res: Response, next: NextFunction) {
+	try {
+		const parsedBody = req.body;
+		if (!parsedBody.email || !parsedBody.password) {
+			throw new BadRequestError("Something went wrong");
+		}
+		const user = await getUserByEmail(parsedBody.email);
+		console.log("Full user object:", JSON.stringify(user, null, 2));
+		if(!await checkPasswordHash(parsedBody.password, user.hashedPassword)){
+			console.log(parsedBody.password);
+			console.log(user.hashedPassword);
+			console.log(user.hashedPassword.length);
+			throw new UnauthorizedError("Wrong Password!");
+		}
+		const userResponse : UserResponse = {
+			id: user.id,
+			createdAt: user.createdAt,
+			updatedAt: user.updatedAt,
+			email: user.email,
+		};
+		res.header("Content-Type", "application/json");
+		res.status(200).send(JSON.stringify(userResponse));
 	}
 	catch (err) {
 		next(err);
@@ -125,6 +165,7 @@ async function handlerGetChirpById(req: Request, res: Response, next: NextFuncti
 	}
 }
 
+app.post("/api/login", handlerLogin);
 app.post("/api/users", handlerUsers)
 app.post("/api/chirps", handlerChirps);
 app.post("/admin/reset", handlerReset);
