@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
 import { createUserByEmail, deleteUsers } from "./db/queries/users.js";
-import { createChirp } from "./db/queries/chirps.js";
+import { createChirp, getAllChirps, getChirpById } from "./db/queries/chirps.js";
 
 
 const app = express();
@@ -101,9 +101,35 @@ async function handlerUsers(req: Request, res: Response, next: NextFunction) {
 	}
 }
 
+async function handlerGetChirps(req: Request, res: Response, next: NextFunction) {
+	try{
+		const chirps = await getAllChirps();
+		res.header("Content-Type", "application/json");
+		res.status(200).send(JSON.stringify(chirps));
+	} catch(err) {
+		next(err);
+	}
+}
+
+async function handlerGetChirpById(req: Request, res: Response, next: NextFunction) {
+	try{
+		const name = req.params.chirpId as string;
+		const chirp = await getChirpById(name);
+		if(!chirp){
+			throw new NotFoundError("Chirp not found");
+		}
+		res.header("Content-Type", "application/json");
+		res.status(200).send(JSON.stringify(chirp));
+	} catch(err){
+		next(err);
+	}
+}
+
 app.post("/api/users", handlerUsers)
 app.post("/api/chirps", handlerChirps);
 app.post("/admin/reset", handlerReset);
+app.get("/api/chirps", handlerGetChirps);
+app.get("/api/chirps/:chirpId", handlerGetChirpById);
 app.get("/admin/metrics", handlerMetrics);
 app.get("/api/healthz", handlerReadiness);
 app.use("/app", express.static("./app"));
