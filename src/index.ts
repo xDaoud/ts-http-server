@@ -4,8 +4,9 @@ import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
 import { createUserByEmail, deleteUsers, getUserByEmail } from "./db/queries/users.js";
 import { createChirp, getAllChirps, getChirpById } from "./db/queries/chirps.js";
-import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, validateJWT } from "./auth.js";
+import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { UserResponse } from "./db/schema.js";
+import { createRefreshToken, getRefreshToken, updateRefreshTokenRevocationDate } from "./db/queries/refreshTokens.js";
 
 
 const app = express();
@@ -71,9 +72,7 @@ async function handlerReset(req: Request, res: Response, next: NextFunction) {
 }
 async function handlerChirps(req: Request, res: Response, next: NextFunction) {
 	try {
-		console.log(req.body);
 		const parsedBody = req.body;
-		console.log(req.body + "no?")
 		if (!parsedBody.body) {
 			throw new BadRequestError("Something went wrong");
 		}
@@ -127,13 +126,16 @@ async function handlerLogin(req: Request, res: Response, next: NextFunction) {
 			throw new UnauthorizedError("Wrong Password!");
 		}
 		const token = makeJWT(user.id, expiresIn, config.secret);
-		type LoginResponse = UserResponse & {token: string};
+		const refreshToken = makeRefreshToken();
+		const insertedRefreshToken = await createRefreshToken(refreshToken, 60, user.id);
+		type LoginResponse = UserResponse & {token: string, refreshToken: string};
 		const loginResponse : LoginResponse = {
 			id: user.id,
 			createdAt: user.createdAt,
 			updatedAt: user.updatedAt,
 			email: user.email,
 			token: token,
+			refreshToken: insertedRefreshToken.token,
 		};
 		res.header("Content-Type", "application/json");
 		res.status(200).send(JSON.stringify(loginResponse));
@@ -166,10 +168,42 @@ async function handlerGetChirpById(req: Request, res: Response, next: NextFuncti
 		next(err);
 	}
 }
+
+async function handlerRefresh(req: Request, res: Response, next: NextFunction) {
+	try{
+		const refreshToken = getBearerToken(req);
+		const tokenRow = await getRefreshToken(refreshToken);
+		if(!tokenRow || tokenRow.expiresAt.getTime() < Date.now() || tokenRow.revokedAt){
+			throw new UnauthorizedError("Unauthorized refresh token");
+		}
+		const token = makeJWT(tokenRow.userId, 3600, config.secret);
+		res.header("Content-Type", "application/json");
+		res.status(200).send(JSON.stringify({token: token}));
+	} catch(err){
+		next(err);
+	}
+}
+
+async function handlerRevoke(req: Request, res: Response, next: NextFunction) {
+	try{
+		const refreshToken = getBearerToken(req);
+		const tokenRow = await getRefreshToken(refreshToken);
+		if(!tokenRow || tokenRow.expiresAt.getTime() < Date.now() || tokenRow.revokedAt){
+			throw new UnauthorizedError("Unauthorized refresh token");
+		}
+		const revoked = await updateRefreshTokenRevocationDate(refreshToken);
+		res.header("Content-Type", "application/json");
+		res.status(204).send();
+	} catch(err){
+		next(err);
+	}
+}
 app.use(express.json());
 app.use(middlewareLogResponses);
 app.use("/app", middlewareMetricsInc);
 
+app.post("/api/revoke", handlerRevoke);
+app.post("/api/refresh", handlerRefresh);
 app.post("/api/login", handlerLogin);
 app.post("/api/users", handlerUsers)
 app.post("/api/chirps", handlerChirps);

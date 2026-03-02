@@ -2,7 +2,7 @@ import argon2 from "argon2";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { BadRequestError, UnauthorizedError } from "./errorClasses.js";
 import { Request } from "express";
-
+import crypto from 'crypto'
 
 export async function hashPassword(password: string) {
     try {
@@ -58,4 +58,8 @@ export function getBearerToken(req: Request){
         throw new BadRequestError("No authorization header in the request!");
     }
     return token.replace("Bearer ", "");
+}
+
+export function makeRefreshToken(){
+    return crypto.randomBytes(32).toString('hex')
 }
