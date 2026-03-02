@@ -55,7 +55,7 @@ export function validateJWT(tokenString: string, secret: string){
 export function getBearerToken(req: Request){
     const token = req.get("Authorization");
     if(!token){
-        throw new BadRequestError("No authorization header in the request!");
+        throw new UnauthorizedError("No authorization header in the request!");
     }
     return token.replace("Bearer ", "");
 }

@@ -2,7 +2,7 @@ import express, { application, NextFunction } from "express";
 import { Request, Response } from "express";
 import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
-import { createUserByEmail, deleteUsers, getUserByEmail } from "./db/queries/users.js";
+import { createUserByEmail, deleteUsers, getUserByEmail, updateEmailAndPassword } from "./db/queries/users.js";
 import { createChirp, getAllChirps, getChirpById } from "./db/queries/chirps.js";
 import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { UserResponse } from "./db/schema.js";
@@ -198,10 +198,34 @@ async function handlerRevoke(req: Request, res: Response, next: NextFunction) {
 		next(err);
 	}
 }
+
+async function handlerPutUsers(req: Request, res: Response, next: NextFunction) {
+	try {
+		const bearerToken = getBearerToken(req);
+		const parsedBody = req.body;
+		if (!parsedBody.email || !parsedBody.password) {
+			throw new BadRequestError("Something went wrong");
+		}
+		const jwtSub = validateJWT(bearerToken, config.secret);
+		const hashedPassword = await hashPassword(parsedBody.password);
+		const user = await updateEmailAndPassword(parsedBody.email, hashedPassword, jwtSub);
+		const userResponse : UserResponse = {
+			id: user.id,
+			createdAt: user.createdAt,
+			updatedAt: user.updatedAt,
+			email: user.email,
+		};
+		res.header("Content-Type", "application/json");
+		res.status(200).send(JSON.stringify(userResponse));
+	} catch (err) {
+		next(err);
+	}
+}
 app.use(express.json());
 app.use(middlewareLogResponses);
 app.use("/app", middlewareMetricsInc);
 
+app.put("/api/users", handlerPutUsers)
 app.post("/api/revoke", handlerRevoke);
 app.post("/api/refresh", handlerRefresh);
 app.post("/api/login", handlerLogin);
