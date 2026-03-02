@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
 import { createUserByEmail, deleteUsers, getUserByEmail, updateEmailAndPassword } from "./db/queries/users.js";
-import { createChirp, getAllChirps, getChirpById } from "./db/queries/chirps.js";
+import { createChirp, deleteChirpById, getAllChirps, getChirpById } from "./db/queries/chirps.js";
 import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { UserResponse } from "./db/schema.js";
 import { createRefreshToken, getRefreshToken, updateRefreshTokenRevocationDate } from "./db/queries/refreshTokens.js";
@@ -221,10 +221,31 @@ async function handlerPutUsers(req: Request, res: Response, next: NextFunction) 
 		next(err);
 	}
 }
+
+async function handlerDeleteChirps(req: Request, res: Response, next: NextFunction) {
+	try{
+		const bearerToken = getBearerToken(req);
+		const jwtSub = validateJWT(bearerToken, config.secret);
+		const chirpId = req.params.chirpId as string;
+		const chirp = await getChirpById(chirpId);
+		if(!chirp){
+			throw new NotFoundError("Chirp not found");
+		}
+		if(chirp.userId !== jwtSub){
+			throw new ForbiddenError("Not allowed");
+		}
+		await deleteChirpById(chirp.id);
+		res.header("Content-Type", "application/json");
+		res.status(204).send();
+	} catch(err){
+		next(err);
+	}
+}
 app.use(express.json());
 app.use(middlewareLogResponses);
 app.use("/app", middlewareMetricsInc);
 
+app.delete("/api/chirps/:chirpId", handlerDeleteChirps);
 app.put("/api/users", handlerPutUsers)
 app.post("/api/revoke", handlerRevoke);
 app.post("/api/refresh", handlerRefresh);
