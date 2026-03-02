@@ -27,6 +27,7 @@ const migrationConfig: MigrationConfig = {
 export const config: {
   api: APIConfig;
   db: DBConfig;
+  secret: string;
 } = {
   api: {
     fileserverHits: 0,
@@ -36,4 +37,5 @@ export const config: {
     url: envOrThrow("DB_URL"),
     migrationConfig,
   },
+  secret: envOrThrow("SECRET"),
 };

@@ -4,7 +4,7 @@ import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
 import { createUserByEmail, deleteUsers, getUserByEmail } from "./db/queries/users.js";
 import { createChirp, getAllChirps, getChirpById } from "./db/queries/chirps.js";
-import { checkPasswordHash, hashPassword } from "./auth.js";
+import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, validateJWT } from "./auth.js";
 import { UserResponse } from "./db/schema.js";
 
 
@@ -44,9 +44,7 @@ function middlewareLogResponses(req: Request, res: Response, next: NextFunction)
 	});
 	next();
 }
-app.use(express.json());
-app.use(middlewareLogResponses);
-app.use("/app", middlewareMetricsInc);
+
 async function handlerReadiness(req: Request, res: Response) {
 	res.set('Content-Type', 'text/plain; charset=utf-8');
 	res.send("OK");
@@ -73,15 +71,19 @@ async function handlerReset(req: Request, res: Response, next: NextFunction) {
 }
 async function handlerChirps(req: Request, res: Response, next: NextFunction) {
 	try {
+		console.log(req.body);
 		const parsedBody = req.body;
-		if (!parsedBody.body || !parsedBody.userId) {
+		console.log(req.body + "no?")
+		if (!parsedBody.body) {
 			throw new BadRequestError("Something went wrong");
 		}
 		if (parsedBody.body.length > 140) {
 			throw new BadRequestError("Chirp is too long. Max length is 140")
 		}
+		const bearerToken = getBearerToken(req);
+		const jwtSub = validateJWT(bearerToken, config.secret);
 		const cleanedBody = cleanBody(parsedBody.body);
-		const chirp = await createChirp(cleanedBody, parsedBody.userId);
+		const chirp = await createChirp(cleanedBody, jwtSub);
 		res.header("Content-Type", "application/json");
 		res.status(201).send(JSON.stringify(chirp));
 	} catch (err) {
@@ -95,9 +97,6 @@ async function handlerUsers(req: Request, res: Response, next: NextFunction) {
 			throw new BadRequestError("Something went wrong");
 		}
 		const hashedPassword = await hashPassword(parsedBody.password);
-		console.log(parsedBody.password);
-		console.log(hashedPassword);
-		console.log(hashedPassword.length);
 		const user = await createUserByEmail(parsedBody.email, hashedPassword);
 		const userResponse : UserResponse = {
 			id: user.id,
@@ -119,22 +118,25 @@ async function handlerLogin(req: Request, res: Response, next: NextFunction) {
 		if (!parsedBody.email || !parsedBody.password) {
 			throw new BadRequestError("Something went wrong");
 		}
+		let expiresIn = 3600;
+		if(parsedBody.expiresInSeconds){
+			expiresIn = parsedBody.expiresInSeconds;
+		}
 		const user = await getUserByEmail(parsedBody.email);
-		console.log("Full user object:", JSON.stringify(user, null, 2));
 		if(!await checkPasswordHash(parsedBody.password, user.hashedPassword)){
-			console.log(parsedBody.password);
-			console.log(user.hashedPassword);
-			console.log(user.hashedPassword.length);
 			throw new UnauthorizedError("Wrong Password!");
 		}
-		const userResponse : UserResponse = {
+		const token = makeJWT(user.id, expiresIn, config.secret);
+		type LoginResponse = UserResponse & {token: string};
+		const loginResponse : LoginResponse = {
 			id: user.id,
 			createdAt: user.createdAt,
 			updatedAt: user.updatedAt,
 			email: user.email,
+			token: token,
 		};
 		res.header("Content-Type", "application/json");
-		res.status(200).send(JSON.stringify(userResponse));
+		res.status(200).send(JSON.stringify(loginResponse));
 	}
 	catch (err) {
 		next(err);
@@ -164,6 +166,9 @@ async function handlerGetChirpById(req: Request, res: Response, next: NextFuncti
 		next(err);
 	}
 }
+app.use(express.json());
+app.use(middlewareLogResponses);
+app.use("/app", middlewareMetricsInc);
 
 app.post("/api/login", handlerLogin);
 app.post("/api/users", handlerUsers)
