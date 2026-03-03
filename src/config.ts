@@ -1,9 +1,11 @@
 import { MigrationConfig } from "drizzle-orm/migrator";
 
-process.loadEnvFile()
+process.loadEnvFile();
+
 type APIConfig = {
 	fileserverHits: number;
 	platform: string;
+	polkaApiKey: string;
 };
 
 
@@ -21,21 +23,22 @@ type DBConfig = {
 };
 
 const migrationConfig: MigrationConfig = {
-  migrationsFolder: "./src/db/migrations",
+	migrationsFolder: "./src/db/migrations",
 };
 
 export const config: {
-  api: APIConfig;
-  db: DBConfig;
-  secret: string;
+	api: APIConfig;
+	db: DBConfig;
+	secret: string;
 } = {
-  api: {
-    fileserverHits: 0,
-	platform: envOrThrow("PLATFORM"),
-  },
-  db: {
-    url: envOrThrow("DB_URL"),
-    migrationConfig,
-  },
-  secret: envOrThrow("SECRET"),
+	api: {
+		fileserverHits: 0,
+		platform: envOrThrow("PLATFORM"),
+		polkaApiKey: envOrThrow("POLKA_KEY"),
+	},
+	db: {
+		url: envOrThrow("DB_URL"),
+		migrationConfig,
+	},
+	secret: envOrThrow("SECRET"),
 };

@@ -4,7 +4,7 @@ import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
 import { createUserByEmail, deleteUsers, getUserByEmail, updateEmailAndPassword, updateUserToRed } from "./db/queries/users.js";
 import { createChirp, deleteChirpById, getAllChirps, getChirpById } from "./db/queries/chirps.js";
-import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
+import { checkPasswordHash, getAPIKey, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { UserResponse } from "./db/schema.js";
 import { createRefreshToken, getRefreshToken, updateRefreshTokenRevocationDate } from "./db/queries/refreshTokens.js";
 
@@ -247,6 +247,9 @@ async function handlerDeleteChirps(req: Request, res: Response, next: NextFuncti
 
 async function handlerPolkaWebhook(req: Request, res: Response, next: NextFunction) {
 	try {
+		if(getAPIKey(req) !== config.api.polkaApiKey){
+			throw new UnauthorizedError("Unauthorized Access!");
+		}
 		const parsedBody = req.body;
 		if (parsedBody.event !== "user.upgraded") {
 			res.status(204).send();
