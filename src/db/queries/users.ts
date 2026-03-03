@@ -38,3 +38,10 @@ export async function updateEmailAndPassword(newEmail: string, newHash: string, 
         }).where(eq(users.id, Id)).returning();
         return updated;
 }
+
+export async function updateUserToRed(Id: string) {
+    const [updated] = await db.update(users).set({
+            isChirpyRed: true,
+        }).where(eq(users.id, Id)).returning();
+        return updated;
+}

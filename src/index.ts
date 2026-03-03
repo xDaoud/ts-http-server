@@ -2,7 +2,7 @@ import express, { application, NextFunction } from "express";
 import { Request, Response } from "express";
 import { config } from "./config.js";
 import { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError } from "./errorClasses.js";
-import { createUserByEmail, deleteUsers, getUserByEmail, updateEmailAndPassword } from "./db/queries/users.js";
+import { createUserByEmail, deleteUsers, getUserByEmail, updateEmailAndPassword, updateUserToRed } from "./db/queries/users.js";
 import { createChirp, deleteChirpById, getAllChirps, getChirpById } from "./db/queries/chirps.js";
 import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { UserResponse } from "./db/schema.js";
@@ -97,11 +97,12 @@ async function handlerUsers(req: Request, res: Response, next: NextFunction) {
 		}
 		const hashedPassword = await hashPassword(parsedBody.password);
 		const user = await createUserByEmail(parsedBody.email, hashedPassword);
-		const userResponse : UserResponse = {
+		const userResponse: UserResponse = {
 			id: user.id,
 			createdAt: user.createdAt,
 			updatedAt: user.updatedAt,
 			email: user.email,
+			isChirpyRed: user.isChirpyRed,
 		};
 		res.header("Content-Type", "application/json");
 		res.status(201).send(JSON.stringify(userResponse));
@@ -118,22 +119,23 @@ async function handlerLogin(req: Request, res: Response, next: NextFunction) {
 			throw new BadRequestError("Something went wrong");
 		}
 		let expiresIn = 3600;
-		if(parsedBody.expiresInSeconds){
+		if (parsedBody.expiresInSeconds) {
 			expiresIn = parsedBody.expiresInSeconds;
 		}
 		const user = await getUserByEmail(parsedBody.email);
-		if(!await checkPasswordHash(parsedBody.password, user.hashedPassword)){
+		if (!await checkPasswordHash(parsedBody.password, user.hashedPassword)) {
 			throw new UnauthorizedError("Wrong Password!");
 		}
 		const token = makeJWT(user.id, expiresIn, config.secret);
 		const refreshToken = makeRefreshToken();
 		const insertedRefreshToken = await createRefreshToken(refreshToken, 60, user.id);
-		type LoginResponse = UserResponse & {token: string, refreshToken: string};
-		const loginResponse : LoginResponse = {
+		type LoginResponse = UserResponse & { token: string, refreshToken: string };
+		const loginResponse: LoginResponse = {
 			id: user.id,
 			createdAt: user.createdAt,
 			updatedAt: user.updatedAt,
 			email: user.email,
+			isChirpyRed: user.isChirpyRed,
 			token: token,
 			refreshToken: insertedRefreshToken.token,
 		};
@@ -146,55 +148,55 @@ async function handlerLogin(req: Request, res: Response, next: NextFunction) {
 }
 
 async function handlerGetChirps(req: Request, res: Response, next: NextFunction) {
-	try{
+	try {
 		const chirps = await getAllChirps();
 		res.header("Content-Type", "application/json");
 		res.status(200).send(JSON.stringify(chirps));
-	} catch(err) {
+	} catch (err) {
 		next(err);
 	}
 }
 
 async function handlerGetChirpById(req: Request, res: Response, next: NextFunction) {
-	try{
+	try {
 		const name = req.params.chirpId as string;
 		const chirp = await getChirpById(name);
-		if(!chirp){
+		if (!chirp) {
 			throw new NotFoundError("Chirp not found");
 		}
 		res.header("Content-Type", "application/json");
 		res.status(200).send(JSON.stringify(chirp));
-	} catch(err){
+	} catch (err) {
 		next(err);
 	}
 }
 
 async function handlerRefresh(req: Request, res: Response, next: NextFunction) {
-	try{
+	try {
 		const refreshToken = getBearerToken(req);
 		const tokenRow = await getRefreshToken(refreshToken);
-		if(!tokenRow || tokenRow.expiresAt.getTime() < Date.now() || tokenRow.revokedAt){
+		if (!tokenRow || tokenRow.expiresAt.getTime() < Date.now() || tokenRow.revokedAt) {
 			throw new UnauthorizedError("Unauthorized refresh token");
 		}
 		const token = makeJWT(tokenRow.userId, 3600, config.secret);
 		res.header("Content-Type", "application/json");
-		res.status(200).send(JSON.stringify({token: token}));
-	} catch(err){
+		res.status(200).send(JSON.stringify({ token: token }));
+	} catch (err) {
 		next(err);
 	}
 }
 
 async function handlerRevoke(req: Request, res: Response, next: NextFunction) {
-	try{
+	try {
 		const refreshToken = getBearerToken(req);
 		const tokenRow = await getRefreshToken(refreshToken);
-		if(!tokenRow || tokenRow.expiresAt.getTime() < Date.now() || tokenRow.revokedAt){
+		if (!tokenRow || tokenRow.expiresAt.getTime() < Date.now() || tokenRow.revokedAt) {
 			throw new UnauthorizedError("Unauthorized refresh token");
 		}
 		const revoked = await updateRefreshTokenRevocationDate(refreshToken);
 		res.header("Content-Type", "application/json");
 		res.status(204).send();
-	} catch(err){
+	} catch (err) {
 		next(err);
 	}
 }
@@ -209,11 +211,12 @@ async function handlerPutUsers(req: Request, res: Response, next: NextFunction) 
 		const jwtSub = validateJWT(bearerToken, config.secret);
 		const hashedPassword = await hashPassword(parsedBody.password);
 		const user = await updateEmailAndPassword(parsedBody.email, hashedPassword, jwtSub);
-		const userResponse : UserResponse = {
+		const userResponse: UserResponse = {
 			id: user.id,
 			createdAt: user.createdAt,
 			updatedAt: user.updatedAt,
 			email: user.email,
+			isChirpyRed: user.isChirpyRed,
 		};
 		res.header("Content-Type", "application/json");
 		res.status(200).send(JSON.stringify(userResponse));
@@ -223,21 +226,42 @@ async function handlerPutUsers(req: Request, res: Response, next: NextFunction) 
 }
 
 async function handlerDeleteChirps(req: Request, res: Response, next: NextFunction) {
-	try{
+	try {
 		const bearerToken = getBearerToken(req);
 		const jwtSub = validateJWT(bearerToken, config.secret);
 		const chirpId = req.params.chirpId as string;
 		const chirp = await getChirpById(chirpId);
-		if(!chirp){
+		if (!chirp) {
 			throw new NotFoundError("Chirp not found");
 		}
-		if(chirp.userId !== jwtSub){
+		if (chirp.userId !== jwtSub) {
 			throw new ForbiddenError("Not allowed");
 		}
 		await deleteChirpById(chirp.id);
 		res.header("Content-Type", "application/json");
 		res.status(204).send();
-	} catch(err){
+	} catch (err) {
+		next(err);
+	}
+}
+
+async function handlerPolkaWebhook(req: Request, res: Response, next: NextFunction) {
+	try {
+		const parsedBody = req.body;
+		if (parsedBody.event !== "user.upgraded") {
+			res.status(204).send();
+			return;
+		}
+		if(!parsedBody.data || !parsedBody.data.userId){
+			throw new BadRequestError("Something went wrong"); 
+		}
+		const redUser = await updateUserToRed(parsedBody.data.userId);
+		if(!redUser){
+			throw new NotFoundError("User not found!");
+		}
+		res.header("Content-Type", "application/json");
+		res.status(204).send();
+	} catch (err) {
 		next(err);
 	}
 }
@@ -245,6 +269,7 @@ app.use(express.json());
 app.use(middlewareLogResponses);
 app.use("/app", middlewareMetricsInc);
 
+app.post("/api/polka/webhooks", handlerPolkaWebhook);
 app.delete("/api/chirps/:chirpId", handlerDeleteChirps);
 app.put("/api/users", handlerPutUsers)
 app.post("/api/revoke", handlerRevoke);
